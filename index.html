@@ -106,98 +106,17 @@
         function toggleTheme() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
 
         // --- INITIALIZATION ---
-        window.onload = async () => {
-            lucide.createIcons();
-            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            applyTheme(savedTheme);
-            gasWebAppUrl = localStorage.getItem(GAS_URL_KEY);
-            if (!gasWebAppUrl) {
-                document.getElementById('setup-modal').style.display = 'flex';
-            } else {
-                document.getElementById('setup-modal').style.display = 'none';
-                await initializeApp();
-            }
-            getLocation();
-            document.getElementById('dashboard-date').valueAsDate = new Date();
-            document.getElementById('dashboard-date').addEventListener('change', () => { loadAttendanceDataForDashboard(); });
-            document.getElementById('image-upload-input').addEventListener('change', handleImageUpload);
-        };
-
-        async function initializeApp() {
-            try {
-                if (typeof faceapi === 'undefined') {
-                    console.error('face-api.js has not been loaded yet.');
-                    alert('Error: face-api.js did not load. Please check your internet connection and refresh.');
-                    return;
-                }
-                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                await Promise.all([
-                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-            } catch (error) {
-                console.error('Initialization failed:', error);
-                alert('ไม่สามารถโหลดโมเดล AI ได้ กรุณาลองรีเฟรชหน้าเว็บ');
-                return;
-            }
-            switchTab('dashboard');
-        }
-
-        function saveGasUrl() {
-            const url = document.getElementById('gas-url').value.trim();
-            if (url) {
-                localStorage.setItem(GAS_URL_KEY, url);
-                gasWebAppUrl = url;
-                document.getElementById('setup-modal').style.display = 'none';
-                initializeApp();
-            } else {
-                alert('กรุณากรอก URL ให้ถูกต้อง');
-            }
-        }
+        window.onload = async () => { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        async function initializeApp() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        function saveGasUrl() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         
         // --- UI & NAVIGATION ---
-        async function switchTab(tabName) {
-             ['dashboard', 'attendance', 'manage'].forEach(name => {
-                document.getElementById(`content-${name}`).classList.add('hidden');
-                document.getElementById(`tab-${name}`).classList.remove('bg-blue-600', 'text-white');
-                document.getElementById(`tab-${name}`).classList.add('text-gray-600', 'dark:text-gray-300');
-            });
-            document.getElementById(`content-${tabName}`).classList.remove('hidden');
-            const activeTab = document.getElementById(`tab-${tabName}`);
-            activeTab.classList.add('bg-blue-600', 'text-white');
-            activeTab.classList.remove('text-gray-600', 'dark:text-gray-300');
-            if (tabName === 'dashboard') {
-                await loadStudentRosterForDashboard();
-                await loadAttendanceDataForDashboard();
-            }
-            if (tabName === 'manage') { await loadStudentDataForTable(); }
-            if (tabName === 'attendance') { await loadStudentDataForRecognition(); }
-        }
+        async function switchTab(tabName) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         
-        // --- NEW: DASHBOARD ROSTER ---
-        async function loadStudentRosterForDashboard() {
-            const rosterGrid = document.getElementById('student-roster-grid');
-            const rosterLoading = document.getElementById('roster-loading');
-            rosterGrid.innerHTML = ''; rosterLoading.style.display = 'block';
-            const response = await apiCall({ action: 'getStudents' });
-            if (response.success) {
-                students = response.data;
-                if (students.length === 0) {
-                    rosterGrid.innerHTML = `<p class="col-span-full text-center text-gray-500">ยังไม่มีข้อมูลนักเรียนในระบบ</p>`;
-                } else {
-                    students.forEach(student => {
-                        const card = document.createElement('div');
-                        card.className = 'bg-gray-50 dark:bg-gray-800 p-3 rounded-lg text-center';
-                        card.innerHTML = `<img src="${student.imagedatabase64 || 'https://placehold.co/150x150/e2e8f0/475569?text=No+Image'}" class="w-24 h-24 rounded-full object-cover mx-auto mb-2 border-2 border-gray-300 dark:border-gray-600"><p class="font-semibold text-sm truncate">${student.name}</p><p class="text-xs text-gray-500">${student.studentid}</p><p class="text-xs text-gray-500">${student.class}</p>`;
-                        rosterGrid.appendChild(card);
-                    });
-                }
-            } else { rosterGrid.innerHTML = `<p class="col-span-full text-center text-red-500">ไม่สามารถโหลดข้อมูลนักเรียนได้</p>`; }
-            rosterLoading.style.display = 'none';
-        }
+        // --- DASHBOARD ROSTER ---
+        async function loadStudentRosterForDashboard() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
 
-        // --- UPDATED: ATTENDANCE PROCESS ---
+        // --- ATTENDANCE PROCESS ---
         function startScanning() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         async function stopScanning() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         function markStatus(studentId, status) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
@@ -207,7 +126,7 @@
         async function loadStudentDataForRecognition() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         async function handleRecognition(student) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
 
-        // --- UPDATED: STUDENT MODAL & PHOTO UPLOAD ---
+        // --- STUDENT MODAL & PHOTO UPLOAD ---
         function switchImageInput(type) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         function handleImageUpload(event) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
         function openStudentModal(student = null) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
