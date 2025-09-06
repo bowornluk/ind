@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบเช็คชื่อนักเรียนอัจฉริยะ</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -97,7 +97,6 @@
             <div id="content-attendance" class="hidden space-y-6">
                 <div id="start-scan-section" class="text-center bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4">เริ่มการเช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-6">กดปุ่มด้านล่างเพื่อเริ่มเปิดกล้องและสแกนใบหน้า</p><button onclick="startScanning()" class="bg-blue-600 text-white px-8 py-3 rounded-full hover:bg-blue-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2"><i data-lucide="camera"></i><span>เริ่มเช็คชื่อ</span></button></div>
                 
-                <!-- ===== START: UI Simplification ===== -->
                 <div id="scanning-section" class="hidden space-y-6">
                     <div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md flex flex-col items-center">
                         <h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">กำลังสแกน...</h2>
@@ -108,7 +107,6 @@
                         <div class="w-full max-w-4xl mx-auto bg-black rounded-lg overflow-hidden relative aspect-video hidden" id="video-wrapper">
                             <video id="video" class="w-full h-full" autoplay muted playsinline></video>
                             <canvas id="overlay" class="absolute top-0 left-0"></canvas>
-                            <!-- Scan success message overlay -->
                             <div id="scan-success-overlay" class="absolute inset-0 bg-green-900 bg-opacity-70 text-white text-2xl font-bold flex items-center justify-center hidden animate-fade-in">
                                 <span id="scan-success-name"></span>&nbsp;เช็คชื่อสำเร็จ!
                             </div>
@@ -120,7 +118,6 @@
                         </button>
                     </div>
                 </div>
-                <!-- ===== END: UI Simplification ===== -->
 
                 <div id="absence-management-section" class="hidden bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md">
                     <h2 class="text-xl font-bold mb-4">สรุปผลการเช็คชื่อ</h2>
@@ -228,9 +225,8 @@
         
         // --- UI & NAVIGATION ---
         function switchTab(tabName) {
-            // Stop all camera activities before switching tabs
             stopCaptureVideo(); 
-            stopScanning(false); // Pass false to prevent showing the student list
+            stopScanning(false);
 
             ['dashboard', 'attendance', 'manage'].forEach(name => {
                 document.getElementById(`content-${name}`).classList.add('hidden');
@@ -241,6 +237,7 @@
             const activeTab = document.getElementById(`tab-${tabName}`);
             activeTab.classList.add('bg-blue-600', 'text-white');
             activeTab.classList.remove('text-gray-600', 'dark:text-gray-300');
+            
             if (tabName === 'dashboard') {
                 loadStudentRosterForDashboard();
                 loadAttendanceDataForDashboard();
@@ -291,12 +288,12 @@
             }
 
             const video = document.getElementById('video');
+            video.removeEventListener('play', onVideoPlay);
             if (video.srcObject) { 
                 video.srcObject.getTracks().forEach(track => track.stop()); 
                 video.srcObject = null;
             }
 
-            // Reset UI
             document.getElementById('video-loader').style.display = 'flex';
             document.getElementById('video-loading-text').innerText = 'กำลังเปิดกล้อง...';
             document.getElementById('video-wrapper').classList.add('hidden');
@@ -377,15 +374,16 @@
 
         async function startVideo() {
             const video = document.getElementById('video');
+            video.addEventListener('play', onVideoPlay);
+            
             const videoLoadingText = document.getElementById('video-loading-text');
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
-                video.addEventListener('play', onVideoPlay);
             } catch (err) {
-                console.error('Error starting video stream:', err);
+                console.error('CRITICAL ERROR starting video stream:', err.name, err.message);
                 videoLoadingText.innerText = 'ไม่สามารถเปิดกล้องได้! กรุณาอนุญาตให้เว็บเข้าถึงกล้อง';
-                alert('ไม่สามารถเปิดกล้องได้\nกรุณาตรวจสอบว่าคุณได้อนุญาตให้เบราว์เซอร์เข้าถึงกล้องแล้ว');
+                alert(`ไม่สามารถเปิดกล้องได้: ${err.name}\nกรุณาตรวจสอบว่าคุณได้อนุญาตให้เบราว์เซอร์เข้าถึงกล้องแล้ว`);
                 stopScanning(false);
             }
         }
@@ -520,7 +518,6 @@
         }
         async function startCaptureVideo() {
             try {
-                // Ensure any previous stream is stopped
                 if (captureStream) {
                     stopCaptureVideo();
                 }
