@@ -536,6 +536,7 @@
             } 
             const videoEl = document.getElementById('capture-video');
             if (videoEl && videoEl.srcObject) {
+                videoEl.srcObject.getTracks().forEach(track => track.stop());
                 videoEl.srcObject = null;
             }
         }
