@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบเช็คชื่อนักเรียนอัจฉริยะ</title>
+    <title>ระบบเช็คชื่อด้วยใบหน้า</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Lucide Icons (Standalone - More Stable) -->
+    <!-- Lucide Icons (Standalone) -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
     <!-- face-api.js (deferred to prevent blocking) -->
@@ -39,7 +39,7 @@
         <header class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
              <div class="flex items-center space-x-3">
                 <i data-lucide="scan-face" class="text-blue-600 w-8 h-8"></i>
-                <h1 class="text-xl md:text-2xl font-bold text-gray-700 dark:text-gray-200">ระบบเช็คชื่อนักเรียนอัจฉริยะ</h1>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-700 dark:text-gray-200">ระบบเช็คชื่อด้วยใบหน้า</h1>
             </div>
             <div class="flex items-center gap-2">
                 <nav class="flex items-center flex-wrap justify-center space-x-1 md:space-x-2 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
@@ -100,52 +100,385 @@
         let gasWebAppUrl = '', faceMatcher = null, pieChart, barChart;
         let students = [], attendance = [], checkedInToday = new Map();
         let isScanning = false, captureStream = null, currentGeoLocation = null;
-        
+
         // --- THEME ---
-        function applyTheme(theme) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function toggleTheme() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        function applyTheme(theme) {
+            const chartTextColor = theme === 'dark' ? 'rgba(229, 231, 235, 0.8)' : 'rgba(55, 65, 81, 0.9)';
+            const chartGridColor = theme === 'dark' ? 'rgba(75, 85, 99, 0.5)' : 'rgba(209, 213, 219, 0.5)';
+            if (theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.getElementById('theme-icon-sun').classList.remove('hidden');
+                document.getElementById('theme-icon-moon').classList.add('hidden');
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('theme-icon-sun').classList.add('hidden');
+                document.getElementById('theme-icon-moon').classList.remove('hidden');
+            }
+            Chart.defaults.color = chartTextColor; Chart.defaults.borderColor = chartGridColor;
+            if (pieChart || barChart) renderDashboard();
+            lucide.createIcons();
+        }
+        function toggleTheme() {
+            const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        }
 
         // --- INITIALIZATION ---
-        window.onload = async () => { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function initializeApp() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function saveGasUrl() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        window.onload = async () => {
+            lucide.createIcons();
+            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            applyTheme(savedTheme);
+            gasWebAppUrl = localStorage.getItem(GAS_URL_KEY);
+            if (!gasWebAppUrl) {
+                document.getElementById('setup-modal').style.display = 'flex';
+            } else {
+                document.getElementById('setup-modal').style.display = 'none';
+                await initializeApp();
+            }
+            getLocation();
+            document.getElementById('dashboard-date').valueAsDate = new Date();
+            document.getElementById('dashboard-date').addEventListener('change', () => { loadAttendanceDataForDashboard(); });
+            document.getElementById('image-upload-input').addEventListener('change', handleImageUpload);
+        };
+
+        async function initializeApp() {
+            try {
+                if (typeof faceapi === 'undefined') {
+                    console.error('face-api.js has not been loaded yet.');
+                    alert('Error: face-api.js did not load. Please check your internet connection and refresh.');
+                    return;
+                }
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                alert('ไม่สามารถโหลดโมเดล AI ได้ กรุณาลองรีเฟรชหน้าเว็บ');
+                return;
+            }
+            switchTab('dashboard');
+        }
+
+        function saveGasUrl() {
+            const url = document.getElementById('gas-url').value.trim();
+            if (url) {
+                localStorage.setItem(GAS_URL_KEY, url);
+                gasWebAppUrl = url;
+                document.getElementById('setup-modal').style.display = 'none';
+                initializeApp();
+            } else {
+                alert('กรุณากรอก URL ให้ถูกต้อง');
+            }
+        }
         
         // --- UI & NAVIGATION ---
-        async function switchTab(tabName) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        async function switchTab(tabName) {
+            ['dashboard', 'attendance', 'manage'].forEach(name => {
+                document.getElementById(`content-${name}`).classList.add('hidden');
+                document.getElementById(`tab-${name}`).classList.remove('bg-blue-600', 'text-white');
+                document.getElementById(`tab-${name}`).classList.add('text-gray-600', 'dark:text-gray-300');
+            });
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            const activeTab = document.getElementById(`tab-${tabName}`);
+            activeTab.classList.add('bg-blue-600', 'text-white');
+            activeTab.classList.remove('text-gray-600', 'dark:text-gray-300');
+            if (tabName === 'dashboard') {
+                await loadStudentRosterForDashboard();
+                await loadAttendanceDataForDashboard();
+            }
+            if (tabName === 'manage') { await loadStudentDataForTable(); }
+            if (tabName === 'attendance') { await loadStudentDataForRecognition(); }
+        }
         
         // --- DASHBOARD ROSTER ---
-        async function loadStudentRosterForDashboard() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        async function loadStudentRosterForDashboard() {
+            const rosterGrid = document.getElementById('student-roster-grid');
+            const rosterLoading = document.getElementById('roster-loading');
+            rosterGrid.innerHTML = ''; rosterLoading.style.display = 'block';
+            const response = await apiCall({ action: 'getStudents' });
+            if (response.success) {
+                students = response.data;
+                if (students.length === 0) {
+                    rosterGrid.innerHTML = `<p class="col-span-full text-center text-gray-500">ยังไม่มีข้อมูลนักเรียนในระบบ</p>`;
+                } else {
+                    students.forEach(student => {
+                        const card = document.createElement('div');
+                        card.className = 'bg-gray-50 dark:bg-gray-800 p-3 rounded-lg text-center';
+                        card.innerHTML = `<img src="${student.imagedatabase64 || 'https://placehold.co/150x150/e2e8f0/475569?text=No+Image'}" class="w-24 h-24 rounded-full object-cover mx-auto mb-2 border-2 border-gray-300 dark:border-gray-600"><p class="font-semibold text-sm truncate">${student.name}</p><p class="text-xs text-gray-500">${student.studentid}</p><p class="text-xs text-gray-500">${student.class}</p>`;
+                        rosterGrid.appendChild(card);
+                    });
+                }
+            } else { rosterGrid.innerHTML = `<p class="col-span-full text-center text-red-500">ไม่สามารถโหลดข้อมูลนักเรียนได้</p>`; }
+            rosterLoading.style.display = 'none';
+        }
 
         // --- ATTENDANCE PROCESS ---
-        function startScanning() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function stopScanning() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function markStatus(studentId, status) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function finishAttendance() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function startVideo() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function onVideoPlay() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function loadStudentDataForRecognition() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function handleRecognition(student) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        function startScanning() {
+            document.getElementById('start-scan-section').classList.add('hidden');
+            document.getElementById('scanning-section').classList.remove('hidden');
+            document.getElementById('absence-management-section').classList.add('hidden');
+            isScanning = true;
+            startVideo();
+        }
+
+        async function stopScanning() {
+            isScanning = false;
+            const video = document.getElementById('video');
+            if (video.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); }
+            document.getElementById('scanning-section').classList.add('hidden');
+            document.getElementById('video-wrapper').classList.add('hidden');
+            const absentStudents = students.filter(s => !checkedInToday.has(s.studentid));
+            const absentList = document.getElementById('absent-list');
+            absentList.innerHTML = '';
+            if (absentStudents.length > 0) {
+                document.getElementById('absence-management-section').classList.remove('hidden');
+                absentStudents.forEach(student => {
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg';
+                    item.innerHTML = `<div class="flex items-center gap-3"><img src="${student.imagedatabase64 || 'https://placehold.co/40x40'}" class="w-10 h-10 rounded-full object-cover"><div><p class="font-medium">${student.name}</p><p class="text-sm text-gray-500">${student.studentid}</p></div></div><div class="flex gap-2" id="status-buttons-${student.studentid}"><button onclick="markStatus('${student.studentid}', 'ขาด')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-full hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300">ขาด</button><button onclick="markStatus('${student.studentid}', 'ลา')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300">ลา</button></div>`;
+                    absentList.appendChild(item);
+                });
+            } else {
+                alert('นักเรียนเช็คชื่อครบทุกคนแล้ว!');
+                finishAttendance();
+            }
+        }
+
+        function markStatus(studentId, status) {
+            const student = students.find(s => s.studentid === studentId);
+            const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: status };
+            checkedInToday.set(studentId, record);
+            const buttonContainer = document.getElementById(`status-buttons-${studentId}`);
+            buttonContainer.innerHTML = `<p class="font-semibold text-sm ${status === 'ขาด' ? 'text-red-500' : 'text-yellow-500'}">บันทึกเป็น: ${status}</p>`;
+        }
+
+        async function finishAttendance() {
+            const recordsToSave = Array.from(checkedInToday.values()).filter(r => r.status === 'ขาด' || r.status === 'ลา');
+            if (recordsToSave.length > 0) { await apiCall({ action: 'recordAttendanceBulk', data: recordsToSave }); }
+            alert('บันทึกข้อมูลการเช็คชื่อเรียบร้อยแล้ว');
+            checkedInToday.clear();
+            document.getElementById('absence-management-section').classList.add('hidden');
+            document.getElementById('start-scan-section').classList.remove('hidden');
+            switchTab('dashboard');
+        }
+
+        function startVideo() {
+            const video = document.getElementById('video');
+            navigator.mediaDevices.getUserMedia({ video: {} })
+                .then(stream => { video.srcObject = stream; })
+                .catch(err => { console.error('Error starting video stream:', err); document.getElementById('video-loading-text').innerText = 'ไม่สามารถเปิดกล้องได้'; });
+            video.addEventListener('play', onVideoPlay);
+        }
+
+        function onVideoPlay() {
+            document.getElementById('video-loader').style.display = 'none';
+            document.getElementById('video-wrapper').classList.remove('hidden');
+            const video = document.getElementById('video');
+            const overlay = document.getElementById('overlay');
+            const displaySize = { width: video.clientWidth, height: video.clientHeight };
+            faceapi.matchDimensions(overlay, displaySize);
+            const recognitionInterval = setInterval(async () => {
+                if (!isScanning) { clearInterval(recognitionInterval); return; }
+                const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
+                if (faceMatcher) {
+                    const results = resizedDetections.map(d => faceMatcher.findBestMatch(d.descriptor));
+                    results.forEach((result, i) => {
+                        const box = resizedDetections[i].detection.box;
+                        const drawBox = new faceapi.draw.DrawBox(box, { label: result.toString() });
+                        drawBox.draw(overlay);
+                        const student = students.find(s => s.name === result.label);
+                        if (student && !checkedInToday.has(student.studentid)) {
+                            handleRecognition(student);
+                        }
+                    });
+                }
+            }, 300);
+        }
+        
+        async function loadStudentDataForRecognition() {
+            const response = await apiCall({ action: 'getStudents' });
+            if (response.success && response.data.length > 0) {
+                students = response.data;
+                const labeledFaceDescriptors = await Promise.all(students.map(async (student) => {
+                    if (student.imagedatabase64 && student.imagedatabase64.startsWith('data:image')) {
+                        try {
+                            const img = await faceapi.fetchImage(student.imagedatabase64);
+                            const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                            if (detections) { return new faceapi.LabeledFaceDescriptors(student.name, [detections.descriptor]); }
+                        } catch (e) { console.error(`Could not process image for ${student.name}`, e); }
+                    }
+                    return null;
+                }));
+                const validDescriptors = labeledFaceDescriptors.filter(Boolean);
+                if (validDescriptors.length > 0) { faceMatcher = new faceapi.FaceMatcher(validDescriptors, 0.6); console.log('Face matcher ready.'); }
+                else { faceMatcher = null; }
+            } else { faceMatcher = null; console.log('No student data found for recognition.'); }
+        }
+        
+        async function handleRecognition(student) {
+            const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: 'มาเรียน' };
+            checkedInToday.set(student.studentid, record);
+            document.getElementById('scan-placeholder').classList.add('hidden');
+            document.getElementById('scanned-student-img').src = student.imagedatabase64;
+            document.getElementById('scanned-student-name').innerText = student.name;
+            document.getElementById('scanned-student-id').innerText = `รหัส: ${student.studentid}`;
+            document.getElementById('scan-result').classList.remove('hidden');
+            await apiCall({ action: 'recordAttendance', data: record });
+        }
 
         // --- STUDENT MODAL & PHOTO UPLOAD ---
-        function switchImageInput(type) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function handleImageUpload(event) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function openStudentModal(student = null) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function closeStudentModal() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function startCaptureVideo() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function stopCaptureVideo() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function capturePhoto() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function loadStudentDataForTable() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function handleStudentFormSubmit(event) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function editStudent(rowIndex) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function deleteStudent(rowIndex) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        function switchImageInput(type) {
+            const cameraTab = document.getElementById('tab-btn-camera'), uploadTab = document.getElementById('tab-btn-upload');
+            const cameraInput = document.getElementById('input-camera'), uploadInput = document.getElementById('input-upload');
+            if (type === 'camera') {
+                cameraTab.classList.add('border-blue-600', 'text-blue-600'); uploadTab.classList.remove('border-blue-600', 'text-blue-600');
+                cameraInput.classList.remove('hidden'); uploadInput.classList.add('hidden');
+                startCaptureVideo();
+            } else {
+                uploadTab.classList.add('border-blue-600', 'text-blue-600'); cameraTab.classList.remove('border-blue-600', 'text-blue-600');
+                uploadInput.classList.remove('hidden'); cameraInput.classList.add('hidden');
+                stopCaptureVideo();
+            }
+        }
+        function handleImageUpload(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas'), MAX_WIDTH = 500;
+                    const scaleSize = MAX_WIDTH / img.width;
+                    canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+                    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+                    document.getElementById('image-preview').src = dataUrl;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                    document.getElementById('student-image-data').value = dataUrl;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        function openStudentModal(student = null) {
+            const form = document.getElementById('student-form'); form.reset();
+            document.getElementById('image-preview').classList.add('hidden');
+            document.getElementById('image-preview').src = '';
+            document.getElementById('student-image-data').value = '';
+            switchImageInput('camera');
+            if (student) {
+                document.getElementById('modal-title').innerText = 'แก้ไขข้อมูลนักเรียน';
+                document.getElementById('student-row-index').value = student.rowIndex;
+                document.getElementById('student-id').value = student.studentid;
+                document.getElementById('student-name').value = student.name;
+                document.getElementById('student-class').value = student.class;
+                document.getElementById('student-image-data').value = student.imagedatabase64 || '';
+                if (student.imagedatabase64) {
+                    switchImageInput('upload');
+                    document.getElementById('image-preview').src = student.imagedatabase64;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('modal-title').innerText = 'เพิ่มข้อมูลนักเรียน';
+            }
+            document.getElementById('student-modal').classList.remove('hidden');
+        }
+        function closeStudentModal() { document.getElementById('student-modal').classList.add('hidden'); stopCaptureVideo(); }
+        function startCaptureVideo() { navigator.mediaDevices.getUserMedia({ video: true }).then(stream => { captureStream = stream; document.getElementById('capture-video').srcObject = stream; }).catch(e => console.error("Could not start video for capture", e)); }
+        function stopCaptureVideo() { if (captureStream) { captureStream.getTracks().forEach(track => track.stop()); captureStream = null; } }
+        function capturePhoto() {
+            const videoEl = document.getElementById('capture-video'), canvas = document.getElementById('capture-canvas');
+            canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
+            canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            document.getElementById('student-image-data').value = canvas.toDataURL('image/jpeg');
+            alert('ถ่ายภาพเรียบร้อยแล้ว');
+        }
+        async function loadStudentDataForTable() {
+            const response = await apiCall({ action: 'getStudents' });
+             if (response.success) {
+                students = response.data; const tableBody = document.getElementById('student-table-body');
+                tableBody.innerHTML = '';
+                students.forEach(student => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td class="p-3">${student.studentid}</td><td class="p-3">${student.name}</td><td class="p-3">${student.class}</td><td class="p-3 text-center"><button onclick="editStudent(${student.rowIndex})" class="text-blue-600 p-1">แก้ไข</button><button onclick="deleteStudent(${student.rowIndex})" class="text-red-600 p-1">ลบ</button></td>`;
+                    tableBody.appendChild(row);
+                });
+            }
+        }
+        async function handleStudentFormSubmit(event) {
+            event.preventDefault();
+            const submitBtn = document.getElementById('form-submit-btn');
+            submitBtn.disabled = true; submitBtn.innerText = 'กำลังบันทึก...';
+            const studentData = { rowIndex: document.getElementById('student-row-index').value, id: document.getElementById('student-id').value, name: document.getElementById('student-name').value, class: document.getElementById('student-class').value, imageData: document.getElementById('student-image-data').value };
+            if (!studentData.imageData) { alert('กรุณาถ่ายภาพหรืออัปโหลดรูปภาพ'); submitBtn.disabled = false; submitBtn.innerText = 'บันทึก'; return; }
+            const action = studentData.rowIndex ? 'updateStudent' : 'addStudent';
+            const response = await apiCall({ action, data: studentData });
+            if (response.success) { closeStudentModal(); loadStudentDataForTable(); } else { alert('Error: ' + response.error); }
+            submitBtn.disabled = false; submitBtn.innerText = 'บันทึก';
+        }
+        function editStudent(rowIndex) { const student = students.find(s => s.rowIndex == rowIndex); if (student) { openStudentModal(student); } }
+        async function deleteStudent(rowIndex) {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนักเรียนคนนี้?')) {
+                const response = await apiCall({ action: 'deleteStudent', data: { rowIndex } });
+                if (response.success) { loadStudentDataForTable(); } else { alert('Error: ' + response.error); }
+            }
+        }
 
         // --- UTILITIES & DASHBOARD ---
-        function getLocation() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function loadAttendanceDataForDashboard() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function renderDashboard() { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function renderPieChart(onTime, late, absent) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        function renderBarChart(hourlyData) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
-        async function apiCall(payload) { /* ... โค้ดส่วนนี้ไม่เปลี่ยนแปลง ... */ }
+        function getLocation() {
+            const locationInfo = document.getElementById('location-info');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => { currentGeoLocation = { lat: position.coords.latitude, lng: position.coords.longitude }; /* locationInfo.innerText = `พิกัด: ${currentGeoLocation.lat.toFixed(4)}, ${currentGeoLocation.lng.toFixed(4)}`; */ },() => { /* locationInfo.innerText = 'ไม่สามารถเข้าถึงตำแหน่งได้'; */ });
+            } else { /* locationInfo.innerText = 'ไม่รองรับ Geolocation'; */ }
+        }
+        async function loadAttendanceDataForDashboard() {
+             const response = await apiCall({ action: 'getAttendance' });
+             if (response.success) { attendance = response.data.map(rec => ({ ...rec, timestamp: new Date(rec.timestamp) })); renderDashboard(); }
+        }
+        function renderDashboard() {
+            const selectedDate = new Date(document.getElementById('dashboard-date').value); selectedDate.setHours(0,0,0,0);
+            const attendanceToday = attendance.filter(rec => { const recDate = new Date(rec.timestamp); recDate.setHours(0,0,0,0); return recDate.getTime() === selectedDate.getTime(); });
+            const lateTime = new Date(selectedDate); lateTime.setHours(8, 30, 0);
+            let onTimeCount = 0, lateCount = 0; const hourlyCounts = Array(24).fill(0);
+            const presentStudents = new Set();
+            attendanceToday.forEach(rec => {
+                if (rec.status === 'มาเรียน') { if (!presentStudents.has(rec.id)) { if (rec.timestamp > lateTime) lateCount++; else onTimeCount++; } presentStudents.add(rec.id); }
+                hourlyCounts[rec.timestamp.getHours()]++;
+            });
+            const absentOrLeaveCount = attendanceToday.filter(r => r.status === 'ขาด' || r.status === 'ลา').length;
+            document.getElementById('stat-present').innerText = onTimeCount + lateCount;
+            document.getElementById('stat-late').innerText = lateCount;
+            document.getElementById('stat-absent').innerText = absentOrLeaveCount;
+            renderPieChart(onTimeCount, lateCount, absentOrLeaveCount);
+            renderBarChart(hourlyCounts);
+        }
+        function renderPieChart(onTime, late, absent) {
+            const ctx = document.getElementById('attendance-pie-chart').getContext('2d');
+            if(pieChart) pieChart.destroy();
+            const total = onTime + late + absent;
+            if (total === 0) { ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); return; }
+            pieChart = new Chart(ctx, { type: 'pie', data: { labels: ['มาตรงเวลา', 'มาสาย', 'ขาด/ลา'], datasets: [{ data: [onTime, late, absent], backgroundColor: ['#34D399', '#FBBF24', '#F87171'] }] } });
+        }
+        function renderBarChart(hourlyData) {
+            const ctx = document.getElementById('attendance-bar-chart').getContext('2d');
+             if(barChart) barChart.destroy();
+             barChart = new Chart(ctx, { type: 'bar', data: { labels: Array.from({length: 12}, (_, i) => `${i+6}:00`), datasets: [{ label: 'จำนวนเช็คชื่อ', data: hourlyData.slice(6, 18), backgroundColor: '#60A5FA' }] }, options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
+        }
+        async function apiCall(payload) {
+            if (!gasWebAppUrl) { alert('กรุณาตั้งค่า Google Apps Script URL ก่อน'); return { success: false, error: 'GAS URL not configured' }; }
+            try {
+                const response = await fetch(gasWebAppUrl, { method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) { console.error('API Call Error:', error); alert(`เกิดข้อผิดพลาดในการเชื่อมต่อกับ Server:\n${error.message}\nกรุณาตรวจสอบ Console (F12) สำหรับข้อมูลเพิ่มเติม`); return { success: false, error: error.message }; }
+        }
     </script>
 </body>
 </html>
