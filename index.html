@@ -74,7 +74,8 @@
                             </div>
                         </div>
                     </div>
-                    </div>
+                    
+                </div>
                 <div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md">
                     <h3 class="font-semibold mb-4">รายชื่อนักเรียนในระบบ</h3>
                     <div id="student-roster-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2"></div>
@@ -257,16 +258,33 @@
             const buttonContainer = document.getElementById(`status-buttons-${studentId}`);
             buttonContainer.innerHTML = `<p class="font-semibold text-sm ${status === 'ขาด' ? 'text-red-500' : 'text-yellow-500'}">บันทึกเป็น: ${status}</p>`;
         }
-
+        
+        // ===== START: CORRECTED FUNCTION =====
         async function finishAttendance() {
+            // คัดกรองข้อมูลเฉพาะนักเรียนที่ถูกระบุว่า "ขาด" หรือ "ลา" เพื่อเตรียมบันทึก
             const recordsToSave = Array.from(checkedInToday.values()).filter(r => r.status === 'ขาด' || r.status === 'ลา');
-            if (recordsToSave.length > 0) { await apiCall({ action: 'recordAttendanceBulk', data: recordsToSave }); }
-            alert('บันทึกข้อมูลการเช็คชื่อเรียบร้อยแล้ว');
+    
+            // ตรวจสอบว่ามีข้อมูลที่ต้องบันทึกหรือไม่
+            if (recordsToSave.length > 0) {
+                // ถ้ามี ให้ส่งข้อมูลไปบันทึกที่ Backend
+                const response = await apiCall({ action: 'recordAttendanceBulk', data: recordsToSave });
+                if (response.success) {
+                    alert('บันทึกข้อมูลนักเรียนที่ ขาด/ลา เรียบร้อยแล้ว');
+                } else {
+                    alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
+                }
+            } else {
+                // ถ้าไม่มีข้อมูล (เช่น ไม่ได้เลือกสถานะ ขาด/ลา ให้นักเรียน) ให้แจ้งเตือน
+                alert('ไม่มีข้อมูลการ ขาด/ลา ของนักเรียนให้บันทึก');
+            }
+    
+            // เคลียร์ค่าและกลับไปหน้า Dashboard (ส่วนนี้จะทำงานเสมอไม่ว่าจะบันทึกสำเร็จหรือไม่)
             checkedInToday.clear();
             document.getElementById('absence-management-section').classList.add('hidden');
             document.getElementById('start-scan-section').classList.remove('hidden');
             switchTab('dashboard');
         }
+        // ===== END: CORRECTED FUNCTION =====
 
         function startVideo() {
             const video = document.getElementById('video');
