@@ -7,10 +7,10 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Lucide Icons (Standalone - More Stable) -->
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- face-api.js (deferred to prevent blocking) -->
+    <!-- face-api.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     
     <!-- Chart.js -->
@@ -116,7 +116,9 @@
         const GAS_URL_KEY = 'gasWebAppUrl';
         let gasWebAppUrl = '', faceMatcher = null, pieChart, barChart;
         let students = [], attendance = [], checkedInToday = new Map();
-        let isScanning = false, captureStream = null, currentGeoLocation = null;
+        let isScanning = false, captureStream = null;
+        let recognitionInterval = null; // Use a global interval
+        let currentGeoLocation = null;
         
         // --- THEME ---
         function applyTheme(theme) {
@@ -193,7 +195,11 @@
         }
         
         // --- UI & NAVIGATION ---
-        async function switchTab(tabName) {
+        function switchTab(tabName) {
+            // Stop all camera activities before switching tabs
+            stopCaptureVideo(); 
+            stopScanning(false); // Pass false to prevent showing the student list
+
             ['dashboard', 'attendance', 'manage'].forEach(name => {
                 document.getElementById(`content-${name}`).classList.add('hidden');
                 document.getElementById(`tab-${name}`).classList.remove('bg-blue-600', 'text-white');
@@ -204,11 +210,13 @@
             activeTab.classList.add('bg-blue-600', 'text-white');
             activeTab.classList.remove('text-gray-600', 'dark:text-gray-300');
             if (tabName === 'dashboard') {
-                await loadStudentRosterForDashboard();
-                await loadAttendanceDataForDashboard();
+                loadStudentRosterForDashboard();
+                loadAttendanceDataForDashboard();
+            } else if (tabName === 'manage') { 
+                loadStudentDataForTable(); 
+            } else if (tabName === 'attendance') {
+                loadStudentDataForRecognition(); 
             }
-            if (tabName === 'manage') { await loadStudentDataForTable(); }
-            if (tabName === 'attendance') { await loadStudentDataForRecognition(); }
         }
         
         // --- DASHBOARD ROSTER ---
@@ -235,7 +243,7 @@
 
         // --- ATTENDANCE PROCESS ---
         function startScanning() {
-            checkedInToday.clear(); // ล้างข้อมูลการเช็คชื่อเก่าเมื่อเริ่มใหม่
+            checkedInToday.clear();
             document.getElementById('start-scan-section').classList.add('hidden');
             document.getElementById('scanning-section').classList.remove('hidden');
             document.getElementById('absence-management-section').classList.add('hidden');
@@ -243,25 +251,43 @@
             startVideo();
         }
 
-        async function stopScanning() {
+        function stopScanning(showStudentList = true) {
             isScanning = false;
-            const video = document.getElementById('video');
-            if (video.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); }
-            document.getElementById('scanning-section').classList.add('hidden');
-            document.getElementById('video-wrapper').classList.add('hidden');
+            if (recognitionInterval) {
+                clearInterval(recognitionInterval);
+                recognitionInterval = null;
+            }
 
+            const video = document.getElementById('video');
+            if (video.srcObject) { 
+                video.srcObject.getTracks().forEach(track => track.stop()); 
+                video.srcObject = null;
+            }
+
+            // Reset UI
+            document.getElementById('video-loader').style.display = 'flex';
+            document.getElementById('video-loading-text').innerText = 'กำลังเปิดกล้อง...';
+            document.getElementById('video-wrapper').classList.add('hidden');
+            document.getElementById('scan-placeholder').classList.remove('hidden');
+            document.getElementById('scan-result').classList.add('hidden');
+            document.getElementById('scanning-section').classList.add('hidden');
+            
+            if (!showStudentList) {
+                document.getElementById('start-scan-section').classList.remove('hidden');
+                return;
+            }
+            
             const studentList = document.getElementById('absent-list');
             studentList.innerHTML = '';
             
             if (students.length > 0) {
                 document.getElementById('absence-management-section').classList.remove('hidden');
-                
                 students.forEach(student => {
                     const checkedInRecord = checkedInToday.get(student.studentid);
                     let statusHtml;
 
                     if (checkedInRecord && checkedInRecord.status === 'มาเรียน') {
-                        statusHtml = `<p class="font-semibold text-sm text-green-500">สถานะ: มาเรียน</p>`;
+                        statusHtml = `<p class="font-semibold text-sm text-green-500">สถานะ: มาเรียน (สแกนแล้ว)</p>`;
                     } else {
                         statusHtml = `<div class="flex gap-2" id="status-buttons-${student.studentid}"><button onclick="markStatus('${student.studentid}', 'ขาด')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-full hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300">ขาด</button><button onclick="markStatus('${student.studentid}', 'ลา')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300">ลา</button></div>`;
                     }
@@ -272,7 +298,6 @@
                     studentList.appendChild(item);
                 });
             } else {
-                document.getElementById('absence-management-section').classList.add('hidden');
                 document.getElementById('start-scan-section').classList.remove('hidden');
             }
         }
@@ -283,7 +308,9 @@
             const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: status };
             checkedInToday.set(studentId, record);
             const buttonContainer = document.getElementById(`status-buttons-${studentId}`);
-            buttonContainer.innerHTML = `<p class="font-semibold text-sm ${status === 'ขาด' ? 'text-red-500' : 'text-yellow-500'}">บันทึกเป็น: ${status}</p>`;
+            if (buttonContainer) {
+                buttonContainer.innerHTML = `<p class="font-semibold text-sm ${status === 'ขาด' ? 'text-red-500' : 'text-yellow-500'}">บันทึกเป็น: ${status}</p>`;
+            }
         }
         
         async function finishAttendance() {
@@ -317,12 +344,19 @@
             switchTab('dashboard');
         }
 
-        function startVideo() {
+        async function startVideo() {
             const video = document.getElementById('video');
-            navigator.mediaDevices.getUserMedia({ video: {} })
-                .then(stream => { video.srcObject = stream; })
-                .catch(err => { console.error('Error starting video stream:', err); document.getElementById('video-loading-text').innerText = 'ไม่สามารถเปิดกล้องได้'; });
-            video.addEventListener('play', onVideoPlay);
+            const videoLoadingText = document.getElementById('video-loading-text');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.addEventListener('play', onVideoPlay);
+            } catch (err) {
+                console.error('Error starting video stream:', err);
+                videoLoadingText.innerText = 'ไม่สามารถเปิดกล้องได้! กรุณาอนุญาตให้เว็บเข้าถึงกล้อง';
+                alert('ไม่สามารถเปิดกล้องได้\nกรุณาตรวจสอบว่าคุณได้อนุญาตให้เบราว์เซอร์เข้าถึงกล้องแล้ว');
+                stopScanning(false);
+            }
         }
 
         function onVideoPlay() {
@@ -332,8 +366,10 @@
             const overlay = document.getElementById('overlay');
             const displaySize = { width: video.clientWidth, height: video.clientHeight };
             faceapi.matchDimensions(overlay, displaySize);
-            const recognitionInterval = setInterval(async () => {
-                if (!isScanning) { clearInterval(recognitionInterval); return; }
+
+            if (recognitionInterval) clearInterval(recognitionInterval);
+            recognitionInterval = setInterval(async () => {
+                if (!isScanning) return;
                 const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
                 const resizedDetections = faceapi.resizeResults(detections, displaySize);
                 overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
@@ -372,15 +408,15 @@
             } else { faceMatcher = null; console.log('No student data found for recognition.'); }
         }
         
-        async function handleRecognition(student) {
+        function handleRecognition(student) {
             const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: 'มาเรียน' };
             checkedInToday.set(student.studentid, record);
             
             document.getElementById('scan-placeholder').classList.add('hidden');
+            document.getElementById('scan-result').classList.remove('hidden');
             document.getElementById('scanned-student-img').src = student.imagedatabase64;
             document.getElementById('scanned-student-name').innerText = student.name;
             document.getElementById('scanned-student-id').innerText = `รหัส: ${student.studentid}`;
-            document.getElementById('scan-result').classList.remove('hidden');
         }
 
         // --- STUDENT MODAL & PHOTO UPLOAD ---
@@ -444,11 +480,33 @@
             }
             document.getElementById('student-modal').classList.remove('hidden');
         }
-        function closeStudentModal() { document.getElementById('student-modal').classList.add('hidden'); stopCaptureVideo(); }
-        function startCaptureVideo() { navigator.mediaDevices.getUserMedia({ video: true }).then(stream => { captureStream = stream; document.getElementById('capture-video').srcObject = stream; }).catch(e => console.error("Could not start video for capture", e)); }
-        function stopCaptureVideo() { if (captureStream) { captureStream.getTracks().forEach(track => track.stop()); captureStream = null; } }
+        function closeStudentModal() { 
+            document.getElementById('student-modal').classList.add('hidden'); 
+            stopCaptureVideo(); 
+        }
+        async function startCaptureVideo() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                captureStream = stream;
+                document.getElementById('capture-video').srcObject = stream;
+            } catch (e) {
+                console.error("Could not start video for capture", e);
+                alert('ไม่สามารถเปิดกล้องสำหรับถ่ายภาพได้');
+            }
+        }
+        function stopCaptureVideo() { 
+            if (captureStream) { 
+                captureStream.getTracks().forEach(track => track.stop()); 
+                captureStream = null; 
+            } 
+        }
         function capturePhoto() {
-            const videoEl = document.getElementById('capture-video'), canvas = document.getElementById('capture-canvas');
+            const videoEl = document.getElementById('capture-video');
+            if (!videoEl.srcObject) {
+                alert('กรุณาเปิดกล้องก่อนถ่ายภาพ');
+                return;
+            }
+            const canvas = document.getElementById('capture-canvas');
             canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
             canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
             document.getElementById('student-image-data').value = canvas.toDataURL('image/jpeg');
@@ -551,4 +609,3 @@
     </script>
 </body>
 </html>
-
