@@ -97,7 +97,7 @@
             <div id="content-attendance" class="hidden space-y-6">
                 <div id="start-scan-section" class="text-center bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4">เริ่มการเช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-6">กดปุ่มด้านล่างเพื่อเริ่มเปิดกล้องและสแกนใบหน้า</p><button onclick="startScanning()" class="bg-blue-600 text-white px-8 py-3 rounded-full hover:bg-blue-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2"><i data-lucide="camera"></i><span>เริ่มเช็คชื่อ</span></button></div>
                 <div id="scanning-section" class="hidden space-y-6"><div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md flex flex-col lg:flex-row gap-6"><div class="flex-grow flex flex-col items-center"><h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">กำลังสแกน...</h2><div id="video-loader" class="flex flex-col items-center justify-center h-64"><div class="loader w-12 h-12 rounded-full border-4 border-gray-200 dark:border-gray-700"></div><p id="video-loading-text" class="mt-4 text-gray-600 dark:text-gray-400">กำลังเปิดกล้อง...</p></div><div class="w-full max-w-2xl mx-auto bg-black rounded-lg overflow-hidden relative aspect-[4/3] hidden" id="video-wrapper"><video id="video" class="w-full h-full" autoplay muted playsinline></video><canvas id="overlay" class="absolute top-0 left-0"></canvas></div></div><div class="lg:w-1/3 flex flex-col items-center bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg"><h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">ผลการสแกนล่าสุด</h2><div id="last-scanned-student" class="text-center flex-grow flex flex-col justify-center items-center"><div id="scan-placeholder" class="text-gray-500 dark:text-gray-400"><i data-lucide="user-round" class="mx-auto w-16 h-16"></i><p>รอการสแกน...</p></div><div id="scan-result" class="hidden animate-fade-in"><img id="scanned-student-img" src="" class="w-32 h-32 rounded-full object-cover mx-auto mb-4 border-4 border-green-500"><p class="font-bold text-xl" id="scanned-student-name"></p><p class="text-gray-600 dark:text-gray-400" id="scanned-student-id"></p><p class="text-green-600 dark:text-green-400 font-semibold mt-2">เช็คชื่อสำเร็จ!</p></div></div></div></div><div class="text-center"><button onclick="stopScanning()" class="bg-red-600 text-white px-8 py-3 rounded-full hover:bg-red-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2"><i data-lucide="stop-circle"></i><span>สิ้นสุดการเช็คชื่อ</span></button></div></div>
-                 <div id="absence-management-section" class="hidden bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md"><h2 class="text-xl font-bold mb-4">นักเรียนที่ยังไม่ได้เช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-4">กรุณาระบุสถานะของนักเรียนด้านล่าง (ขาด หรือ ลา)</p><div id="absent-list" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2"></div><div class="text-right mt-6"><button onclick="finishAttendance()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกและเสร็จสิ้น</button></div></div>
+                 <div id="absence-management-section" class="hidden bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md"><h2 class="text-xl font-bold mb-4">สรุปผลการเช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-4">ตรวจสอบสถานะของนักเรียนและกดบันทึกเพื่อยืนยัน</p><div id="absent-list" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2"></div><div class="text-right mt-6"><button onclick="finishAttendance()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกและเสร็จสิ้น</button></div></div>
             </div>
 
             <!-- Manage Students Tab -->
@@ -235,6 +235,7 @@
 
         // --- ATTENDANCE PROCESS ---
         function startScanning() {
+            checkedInToday.clear(); // ล้างข้อมูลการเช็คชื่อเก่าเมื่อเริ่มใหม่
             document.getElementById('start-scan-section').classList.add('hidden');
             document.getElementById('scanning-section').classList.remove('hidden');
             document.getElementById('absence-management-section').classList.add('hidden');
@@ -248,20 +249,31 @@
             if (video.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); }
             document.getElementById('scanning-section').classList.add('hidden');
             document.getElementById('video-wrapper').classList.add('hidden');
-            const absentStudents = students.filter(s => !checkedInToday.has(s.studentid));
-            const absentList = document.getElementById('absent-list');
-            absentList.innerHTML = '';
-            if (absentStudents.length > 0) {
+
+            const studentList = document.getElementById('absent-list');
+            studentList.innerHTML = '';
+            
+            if (students.length > 0) {
                 document.getElementById('absence-management-section').classList.remove('hidden');
-                absentStudents.forEach(student => {
+                
+                students.forEach(student => {
+                    const checkedInRecord = checkedInToday.get(student.studentid);
+                    let statusHtml;
+
+                    if (checkedInRecord && checkedInRecord.status === 'มาเรียน') {
+                        statusHtml = `<p class="font-semibold text-sm text-green-500">สถานะ: มาเรียน</p>`;
+                    } else {
+                        statusHtml = `<div class="flex gap-2" id="status-buttons-${student.studentid}"><button onclick="markStatus('${student.studentid}', 'ขาด')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-full hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300">ขาด</button><button onclick="markStatus('${student.studentid}', 'ลา')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300">ลา</button></div>`;
+                    }
+
                     const item = document.createElement('div');
                     item.className = 'flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg';
-                    item.innerHTML = `<div class="flex items-center gap-3"><img src="${student.imagedatabase64 || 'https://placehold.co/40x40'}" class="w-10 h-10 rounded-full object-cover"><div><p class="font-medium">${student.name}</p><p class="text-sm text-gray-500">${student.studentid}</p></div></div><div class="flex gap-2" id="status-buttons-${student.studentid}"><button onclick="markStatus('${student.studentid}', 'ขาด')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-full hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300">ขาด</button><button onclick="markStatus('${student.studentid}', 'ลา')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300">ลา</button></div>`;
-                    absentList.appendChild(item);
+                    item.innerHTML = `<div class="flex items-center gap-3"><img src="${student.imagedatabase64 || 'https://placehold.co/40x40'}" class="w-10 h-10 rounded-full object-cover"><div><p class="font-medium">${student.name}</p><p class="text-sm text-gray-500">${student.studentid}</p></div></div>${statusHtml}`;
+                    studentList.appendChild(item);
                 });
             } else {
-                alert('นักเรียนเช็คชื่อครบทุกคนแล้ว!');
-                finishAttendance();
+                document.getElementById('absence-management-section').classList.add('hidden');
+                document.getElementById('start-scan-section').classList.remove('hidden');
             }
         }
 
@@ -275,24 +287,30 @@
         }
         
         async function finishAttendance() {
-            // คัดกรองข้อมูลเฉพาะนักเรียนที่ถูกระบุว่า "ขาด" หรือ "ลา" เพื่อเตรียมบันทึก
-            const recordsToSave = Array.from(checkedInToday.values()).filter(r => r.status === 'ขาด' || r.status === 'ลา');
-    
-            // ตรวจสอบว่ามีข้อมูลที่ต้องบันทึกหรือไม่
+            const recordsToSave = [];
+            const timestamp = new Date().toISOString();
+            const location = currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A';
+
+            students.forEach(student => {
+                if (checkedInToday.has(student.studentid)) {
+                    recordsToSave.push(checkedInToday.get(student.studentid));
+                } else {
+                    const absentRecord = { id: student.studentid, name: student.name, class: student.class, timestamp, location, status: 'ขาด' };
+                    recordsToSave.push(absentRecord);
+                }
+            });
+
             if (recordsToSave.length > 0) {
-                // ถ้ามี ให้ส่งข้อมูลไปบันทึกที่ Backend
                 const response = await apiCall({ action: 'recordAttendanceBulk', data: recordsToSave });
                 if (response.success) {
-                    alert('บันทึกข้อมูลนักเรียนที่ ขาด/ลา เรียบร้อยแล้ว');
+                    alert('บันทึกข้อมูลการเช็คชื่อทั้งหมดเรียบร้อยแล้ว');
                 } else {
                     alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
                 }
             } else {
-                // ถ้าไม่มีข้อมูล (เช่น ไม่ได้เลือกสถานะ ขาด/ลา ให้นักเรียน) ให้แจ้งเตือน
-                alert('ไม่มีข้อมูลการ ขาด/ลา ของนักเรียนให้บันทึก');
+                alert('ไม่มีข้อมูลนักเรียนให้บันทึก');
             }
-    
-            // เคลียร์ค่าและกลับไปหน้า Dashboard (ส่วนนี้จะทำงานเสมอไม่ว่าจะบันทึกสำเร็จหรือไม่)
+
             checkedInToday.clear();
             document.getElementById('absence-management-section').classList.add('hidden');
             document.getElementById('start-scan-section').classList.remove('hidden');
@@ -357,12 +375,12 @@
         async function handleRecognition(student) {
             const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: 'มาเรียน' };
             checkedInToday.set(student.studentid, record);
+            
             document.getElementById('scan-placeholder').classList.add('hidden');
             document.getElementById('scanned-student-img').src = student.imagedatabase64;
             document.getElementById('scanned-student-name').innerText = student.name;
             document.getElementById('scanned-student-id').innerText = `รหัส: ${student.studentid}`;
             document.getElementById('scan-result').classList.remove('hidden');
-            await apiCall({ action: 'recordAttendance', data: record });
         }
 
         // --- STUDENT MODAL & PHOTO UPLOAD ---
@@ -533,3 +551,4 @@
     </script>
 </body>
 </html>
+
