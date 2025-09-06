@@ -145,7 +145,7 @@
         const GAS_URL_KEY = 'gasWebAppUrl';
         let gasWebAppUrl = '', faceMatcher = null, pieChart, barChart;
         let students = [], attendance = [], checkedInToday = new Map();
-        let isScanning = false, captureStream = null;
+        let isScanning = false, captureStream = null, scanStream = null;
         let recognitionInterval = null; 
         let currentGeoLocation = null;
         
@@ -289,8 +289,12 @@
 
             const video = document.getElementById('video');
             video.removeEventListener('play', onVideoPlay);
-            if (video.srcObject) { 
-                video.srcObject.getTracks().forEach(track => track.stop()); 
+            if (scanStream) { 
+                scanStream.getTracks().forEach(track => track.stop()); 
+                scanStream = null;
+            }
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
                 video.srcObject = null;
             }
 
@@ -378,8 +382,11 @@
             
             const videoLoadingText = document.getElementById('video-loading-text');
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
+                if (scanStream) {
+                    stopScanning(false);
+                }
+                scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = scanStream;
             } catch (err) {
                 console.error('CRITICAL ERROR starting video stream:', err.name, err.message);
                 videoLoadingText.innerText = 'ไม่สามารถเปิดกล้องได้! กรุณาอนุญาตให้เว็บเข้าถึงกล้อง';
