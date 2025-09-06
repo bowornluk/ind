@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
     <title>ระบบเช็คชื่อนักเรียนอัจฉริยะ</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -96,8 +96,40 @@
             <!-- Attendance Tab -->
             <div id="content-attendance" class="hidden space-y-6">
                 <div id="start-scan-section" class="text-center bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4">เริ่มการเช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-6">กดปุ่มด้านล่างเพื่อเริ่มเปิดกล้องและสแกนใบหน้า</p><button onclick="startScanning()" class="bg-blue-600 text-white px-8 py-3 rounded-full hover:bg-blue-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2"><i data-lucide="camera"></i><span>เริ่มเช็คชื่อ</span></button></div>
-                <div id="scanning-section" class="hidden space-y-6"><div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md flex flex-col lg:flex-row gap-6"><div class="flex-grow flex flex-col items-center"><h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">กำลังสแกน...</h2><div id="video-loader" class="flex flex-col items-center justify-center h-64"><div class="loader w-12 h-12 rounded-full border-4 border-gray-200 dark:border-gray-700"></div><p id="video-loading-text" class="mt-4 text-gray-600 dark:text-gray-400">กำลังเปิดกล้อง...</p></div><div class="w-full max-w-2xl mx-auto bg-black rounded-lg overflow-hidden relative aspect-[4/3] hidden" id="video-wrapper"><video id="video" class="w-full h-full" autoplay muted playsinline></video><canvas id="overlay" class="absolute top-0 left-0"></canvas></div></div><div class="lg:w-1/3 flex flex-col items-center bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg"><h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">ผลการสแกนล่าสุด</h2><div id="last-scanned-student" class="text-center flex-grow flex flex-col justify-center items-center"><div id="scan-placeholder" class="text-gray-500 dark:text-gray-400"><i data-lucide="user-round" class="mx-auto w-16 h-16"></i><p>รอการสแกน...</p></div><div id="scan-result" class="hidden animate-fade-in"><img id="scanned-student-img" src="" class="w-32 h-32 rounded-full object-cover mx-auto mb-4 border-4 border-green-500"><p class="font-bold text-xl" id="scanned-student-name"></p><p class="text-gray-600 dark:text-gray-400" id="scanned-student-id"></p><p class="text-green-600 dark:text-green-400 font-semibold mt-2">เช็คชื่อสำเร็จ!</p></div></div></div></div><div class="text-center"><button onclick="stopScanning()" class="bg-red-600 text-white px-8 py-3 rounded-full hover:bg-red-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2"><i data-lucide="stop-circle"></i><span>สิ้นสุดการเช็คชื่อ</span></button></div></div>
-                 <div id="absence-management-section" class="hidden bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md"><h2 class="text-xl font-bold mb-4">สรุปผลการเช็คชื่อ</h2><p class="text-gray-600 dark:text-gray-400 mb-4">ตรวจสอบสถานะของนักเรียนและกดบันทึกเพื่อยืนยัน</p><div id="absent-list" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2"></div><div class="text-right mt-6"><button onclick="finishAttendance()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกและเสร็จสิ้น</button></div></div>
+                
+                <!-- ===== START: UI Simplification ===== -->
+                <div id="scanning-section" class="hidden space-y-6">
+                    <div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md flex flex-col items-center">
+                        <h2 class="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">กำลังสแกน...</h2>
+                        <div id="video-loader" class="flex flex-col items-center justify-center h-64 w-full">
+                            <div class="loader w-12 h-12 rounded-full border-4 border-gray-200 dark:border-gray-700"></div>
+                            <p id="video-loading-text" class="mt-4 text-gray-600 dark:text-gray-400">กำลังเปิดกล้อง...</p>
+                        </div>
+                        <div class="w-full max-w-4xl mx-auto bg-black rounded-lg overflow-hidden relative aspect-video hidden" id="video-wrapper">
+                            <video id="video" class="w-full h-full" autoplay muted playsinline></video>
+                            <canvas id="overlay" class="absolute top-0 left-0"></canvas>
+                            <!-- Scan success message overlay -->
+                            <div id="scan-success-overlay" class="absolute inset-0 bg-green-900 bg-opacity-70 text-white text-2xl font-bold flex items-center justify-center hidden animate-fade-in">
+                                <span id="scan-success-name"></span>&nbsp;เช็คชื่อสำเร็จ!
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <button onclick="stopScanning()" class="bg-red-600 text-white px-8 py-3 rounded-full hover:bg-red-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2">
+                            <i data-lucide="stop-circle"></i><span>สิ้นสุดการเช็คชื่อ</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- ===== END: UI Simplification ===== -->
+
+                <div id="absence-management-section" class="hidden bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">สรุปผลการเช็คชื่อ</h2>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4">ตรวจสอบสถานะของนักเรียนและกดบันทึกเพื่อยืนยัน</p>
+                    <div id="absent-list" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2"></div>
+                    <div class="text-right mt-6">
+                        <button onclick="finishAttendance()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกและเสร็จสิ้น</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Manage Students Tab -->
@@ -117,7 +149,7 @@
         let gasWebAppUrl = '', faceMatcher = null, pieChart, barChart;
         let students = [], attendance = [], checkedInToday = new Map();
         let isScanning = false, captureStream = null;
-        let recognitionInterval = null; // Use a global interval
+        let recognitionInterval = null; 
         let currentGeoLocation = null;
         
         // --- THEME ---
@@ -268,8 +300,7 @@
             document.getElementById('video-loader').style.display = 'flex';
             document.getElementById('video-loading-text').innerText = 'กำลังเปิดกล้อง...';
             document.getElementById('video-wrapper').classList.add('hidden');
-            document.getElementById('scan-placeholder').classList.remove('hidden');
-            document.getElementById('scan-result').classList.add('hidden');
+            document.getElementById('scan-success-overlay').classList.add('hidden');
             document.getElementById('scanning-section').classList.add('hidden');
             
             if (!showStudentList) {
@@ -412,11 +443,14 @@
             const record = { id: student.studentid, name: student.name, class: student.class, timestamp: new Date().toISOString(), location: currentGeoLocation ? `${currentGeoLocation.lat},${currentGeoLocation.lng}` : 'N/A', status: 'มาเรียน' };
             checkedInToday.set(student.studentid, record);
             
-            document.getElementById('scan-placeholder').classList.add('hidden');
-            document.getElementById('scan-result').classList.remove('hidden');
-            document.getElementById('scanned-student-img').src = student.imagedatabase64;
-            document.getElementById('scanned-student-name').innerText = student.name;
-            document.getElementById('scanned-student-id').innerText = `รหัส: ${student.studentid}`;
+            const successOverlay = document.getElementById('scan-success-overlay');
+            const successName = document.getElementById('scan-success-name');
+            successName.innerText = student.name;
+            successOverlay.classList.remove('hidden');
+
+            setTimeout(() => {
+                successOverlay.classList.add('hidden');
+            }, 2000);
         }
 
         // --- STUDENT MODAL & PHOTO UPLOAD ---
@@ -486,6 +520,10 @@
         }
         async function startCaptureVideo() {
             try {
+                // Ensure any previous stream is stopped
+                if (captureStream) {
+                    stopCaptureVideo();
+                }
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 captureStream = stream;
                 document.getElementById('capture-video').srcObject = stream;
@@ -499,6 +537,10 @@
                 captureStream.getTracks().forEach(track => track.stop()); 
                 captureStream = null; 
             } 
+            const videoEl = document.getElementById('capture-video');
+            if (videoEl && videoEl.srcObject) {
+                videoEl.srcObject = null;
+            }
         }
         function capturePhoto() {
             const videoEl = document.getElementById('capture-video');
@@ -609,3 +651,4 @@
     </script>
 </body>
 </html>
+
